@@ -1,0 +1,514 @@
+Replit에서 즉시 실행 가능한 **React + Vite + TailwindCSS** 기반의 관리자 대시보드 코드를 작성해 드립니다.
+
+이 코드는 복잡한 폴더 구조 대신, **복사-붙여넣기로 바로 작동**할 수 있도록 핵심 로직을 압축해서 구성했습니다.
+
+---
+
+### 🚀 Replit 세팅 순서
+
+1. **Replit 생성**: [Create Repl] → Template에서 **`React` (Vite)** 선택.
+2. **의존성 설치**: `Shell` 탭에서 아래 명령어 입력.
+```bash
+npm install axios @tanstack/react-query lucide-react clsx tailwind-merge
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+
+```
+
+
+3. **Tailwind 설정**: `tailwind.config.js` 파일의 `content` 배열 수정.
+```javascript
+content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+
+```
+
+
+4. **CSS 설정**: `src/index.css` 내용을 지우고 아래 3줄로 교체.
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+```
+
+
+
+이제 아래 코드들을 파일에 덮어쓰기 하세요.
+
+---
+
+### 1. API 통신 로직 (`src/api.js`)
+
+AWS Lambda URL을 동적으로 입력받아 통신하는 설정입니다.
+
+```javascript
+import axios from 'axios';
+
+// API 클라이언트 생성 함수
+export const createApiClient = (baseUrl) => {
+  const client = axios.create({
+    baseURL: baseUrl,
+    headers: { 'Content-Type': 'application/json' },
+  });
+  return client;
+};
+
+// --- API 함수들 ---
+
+// 1. 검색
+export const searchIngredients = async (client, query) => {
+  if (!query) return [];
+  const res = await client.get(`/search?q=${query}`);
+  return res.data.data || [];
+};
+
+// 2. 범위 조회 (1000, 2000...)
+export const getRangeItems = async (client, digitNumber) => {
+  const res = await client.get(`/getxdigititems?digitNumber=${digitNumber}`);
+  return res.data.data || [];
+};
+
+// 3. 재료 생성 (통합)
+export const createFood = async (client, { type, payload }) => {
+  // type: 'standard', 'mystery', 'cuisine'
+  let endpoint = '/createNewFood';
+  if (type === 'mystery') endpoint = '/createMisteryFood';
+  if (type === 'cuisine') endpoint = '/createCuisineFood';
+  
+  // 백엔드가 배열 입력을 받으므로 배열로 감싸서 전송
+  const res = await client.post(endpoint, [payload]);
+  return res.data;
+};
+
+// 4. 재료 수정
+export const patchFood = async (client, payload) => {
+  const res = await client.patch('/patch/fooditem', [payload]);
+  return res.data;
+};
+
+// 5. 삭제
+export const deleteIngredient = async (client, id) => {
+  const res = await client.delete('/delete/ingredient', { data: [{ id }] });
+  return res.data;
+};
+
+// 6. 닉네임 추가
+export const addNickname = async (client, payload) => {
+  const res = await client.post('/addNickname', [payload]);
+  return res.data;
+};
+
+// 7. Ingredient -> Nickname 마이그레이션
+export const migrateToNickname = async (client, payload) => {
+  const res = await client.post('/migrationIngredientToNickname', [payload]);
+  return res.data;
+};
+
+```
+
+---
+
+### 2. 메인 대시보드 (`src/App.jsx`)
+
+모든 UI와 로직이 통합된 메인 파일입니다.
+
+```jsx
+import React, { useState } from 'react';
+import { QueryClient, QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
+import { createApiClient, searchIngredients, getRangeItems, createFood, patchFood, deleteIngredient, addNickname, migrateToNickname } from './api';
+import { Search, Plus, ListFilter, Edit3, Trash2, ArrowRightLeft, Database, Settings } from 'lucide-react';
+
+const queryClient = new QueryClient();
+
+// --- Components ---
+
+// 1. 설정 및 API URL 입력
+const ConfigHeader = ({ baseUrl, setBaseUrl }) => (
+  <div className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md">
+    <div className="flex items-center gap-2 font-bold text-xl">
+      <Database className="text-green-400" />
+      <span>Master Food Admin</span>
+    </div>
+    <div className="flex gap-2 items-center">
+      <span className="text-xs text-gray-400">AWS Gateway URL:</span>
+      <input 
+        type="text" 
+        value={baseUrl} 
+        onChange={(e) => setBaseUrl(e.target.value)}
+        className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm w-64 text-white"
+        placeholder="https://....amazonaws.com/..."
+      />
+    </div>
+  </div>
+);
+
+// 2. 검색 탭
+const SearchTab = ({ client }) => {
+  const [q, setQ] = useState('');
+  const { data, refetch, isFetching } = useQuery({
+    queryKey: ['search', q],
+    queryFn: () => searchIngredients(client, q),
+    enabled: false
+  });
+
+  const handleDelete = useMutation({
+    mutationFn: (id) => deleteIngredient(client, id),
+    onSuccess: () => { alert('삭제 완료'); refetch(); }
+  });
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex gap-2">
+        <input 
+          className="border p-2 rounded flex-1 shadow-sm"
+          placeholder="재료 이름 또는 별명 검색 (예: 양파)"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && refetch()}
+        />
+        <button onClick={() => refetch()} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2">
+          <Search size={18} /> 검색
+        </button>
+      </div>
+
+      {isFetching && <div className="text-gray-500">로딩중...</div>}
+      
+      <div className="grid gap-3">
+        {data?.map((item) => (
+          <div key={item.id} className="border p-4 rounded-lg bg-white shadow-sm hover:shadow-md transition flex justify-between items-start">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="bg-slate-100 text-slate-600 text-xs px-2 py-1 rounded font-mono font-bold">ID: {item.id}</span>
+                <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded font-bold uppercase">{item.label}</span>
+                <h3 className="font-bold text-lg">{item.master_name}</h3>
+              </div>
+              <div className="text-sm text-gray-500 mt-2">
+                <span className="font-semibold">Names:</span> {JSON.stringify(item.names)}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => {
+                  const newName = prompt("새 Master Name 입력:", item.master_name);
+                  if(newName) patchFood(client, { id: item.id, master_name: newName }).then(() => refetch());
+                }}
+                className="p-2 text-gray-500 hover:text-blue-600 border rounded"
+              >
+                <Edit3 size={16} />
+              </button>
+              <button 
+                onClick={() => { if(confirm('정말 삭제합니까?')) handleDelete.mutate(item.id); }}
+                className="p-2 text-gray-500 hover:text-red-600 border rounded"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+        ))}
+        {data?.length === 0 && !isFetching && <div className="text-center text-gray-400 py-10">데이터가 없습니다.</div>}
+      </div>
+    </div>
+  );
+};
+
+// 3. 생성 탭
+const CreateTab = ({ client }) => {
+  const [type, setType] = useState('standard'); // standard, mystery, cuisine
+  const [form, setForm] = useState({ digitNumber: 1000, label: 'vegetable', masterName: '', ko: '', en: '' });
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const payload = {
+        masterName: form.masterName,
+        names: { ko: form.ko, en: form.en }
+      };
+      
+      // 요청 포맷 맞추기
+      let reqBody;
+      if (type === 'standard') {
+        reqBody = {
+          digitNumber: Number(form.digitNumber),
+          food: { ...payload, label: form.label }
+        };
+      } else {
+        reqBody = payload; // mystery, cuisine은 payload 구조가 다름 (간소화)
+      }
+
+      return createFood(client, { type, payload: reqBody });
+    },
+    onSuccess: () => { alert('생성 성공!'); setForm({ ...form, masterName: '', ko: '', en: '' }); },
+    onError: (err) => alert('에러: ' + err.message)
+  });
+
+  return (
+    <div className="p-4 max-w-2xl mx-auto">
+      <div className="flex gap-2 mb-6 border-b pb-2">
+        {['standard', 'mystery', 'cuisine'].map(t => (
+          <button 
+            key={t}
+            onClick={() => setType(t)}
+            className={`px-4 py-2 rounded capitalize font-medium ${type === t ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}
+          >
+            {t} Food
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-4 bg-white p-6 rounded-lg border shadow-sm">
+        {type === 'standard' && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Digit Number (Bucket)</label>
+              <select 
+                className="w-full border p-2 rounded"
+                value={form.digitNumber}
+                onChange={e => setForm({...form, digitNumber: e.target.value})}
+              >
+                {[1000, 2000, 3000, 4000, 5000].map(n => <option key={n} value={n}>{n}번대</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Label</label>
+              <input 
+                className="w-full border p-2 rounded" 
+                value={form.label} 
+                onChange={e => setForm({...form, label: e.target.value})} 
+                placeholder="Ex: vegetable"
+              />
+            </div>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Master Name (Key)</label>
+          <input 
+            className="w-full border p-2 rounded" 
+            value={form.masterName} 
+            onChange={e => setForm({...form, masterName: e.target.value})} 
+            placeholder="Ex: Onion"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Korean Name</label>
+            <input 
+              className="w-full border p-2 rounded" 
+              value={form.ko} 
+              onChange={e => setForm({...form, ko: e.target.value})} 
+              placeholder="양파"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">English Name</label>
+            <input 
+              className="w-full border p-2 rounded" 
+              value={form.en} 
+              onChange={e => setForm({...form, en: e.target.value})} 
+              placeholder="Onion"
+            />
+          </div>
+        </div>
+
+        <button 
+          onClick={() => mutation.mutate()} 
+          disabled={mutation.isPending}
+          className="w-full bg-green-600 text-white py-3 rounded font-bold hover:bg-green-700 transition"
+        >
+          {mutation.isPending ? 'Saving...' : 'Create New Food'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// 4. 범위 조회 탭
+const RangeTab = ({ client }) => {
+  const [digit, setDigit] = useState(1000);
+  const { data, refetch } = useQuery({
+    queryKey: ['range', digit],
+    queryFn: () => getRangeItems(client, digit)
+  });
+
+  return (
+    <div className="p-4">
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+        {[1000, 2000, 3000, 4000, 5000, 8000, 9000].map(d => (
+          <button 
+            key={d}
+            onClick={() => { setDigit(d); setTimeout(refetch, 0); }}
+            className={`px-3 py-1 rounded text-sm whitespace-nowrap ${digit === d ? 'bg-slate-800 text-white' : 'bg-gray-200'}`}
+          >
+            {d}번대
+          </button>
+        ))}
+      </div>
+      
+      <div className="bg-white border rounded-lg overflow-hidden">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-gray-50 text-gray-700">
+            <tr>
+              <th className="p-3 border-b">ID</th>
+              <th className="p-3 border-b">Master Name</th>
+              <th className="p-3 border-b">Label</th>
+              <th className="p-3 border-b">KO / EN</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data?.map(item => (
+              <tr key={item.id} className="border-b hover:bg-gray-50">
+                <td className="p-3 font-mono">{item.id}</td>
+                <td className="p-3 font-bold">{item.master_name}</td>
+                <td className="p-3 text-xs uppercase text-gray-500">{item.label}</td>
+                <td className="p-3 text-gray-600">
+                  {item.names?.ko} / {item.names?.en}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// 5. 마이그레이션 탭
+const MigrationTab = ({ client }) => {
+  const [mode, setMode] = useState('toNickname'); // toNickname
+  const [form, setForm] = useState({ sourceId: '', targetId: '', synonym: '' });
+
+  const mutation = useMutation({
+    mutationFn: () => migrateToNickname(client, {
+      source_id: Number(form.sourceId),
+      ingredient_id: Number(form.targetId),
+      lang_code: 'ko',
+      synonym: form.synonym
+    }),
+    onSuccess: () => alert('통합 완료!'),
+    onError: (e) => alert(e.message)
+  });
+
+  return (
+    <div className="p-4 max-w-xl mx-auto">
+      <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-6">
+        <h3 className="font-bold text-yellow-800 flex items-center gap-2">
+          <ArrowRightLeft size={18} /> 재료 병합 (To Nickname)
+        </h3>
+        <p className="text-sm text-yellow-700 mt-1">
+          잘못 등록된 재료(Source)를 삭제하고, 다른 재료(Target)의 별명(Nickname)으로 통합합니다.
+        </p>
+      </div>
+
+      <div className="space-y-4 bg-white p-6 border rounded-lg">
+        <div>
+          <label className="block text-sm font-bold text-red-600 mb-1">삭제할 ID (Source)</label>
+          <input 
+            type="number" 
+            className="w-full border p-2 rounded" 
+            value={form.sourceId}
+            onChange={e => setForm({...form, sourceId: e.target.value})}
+            placeholder="예: 9005 (임시 재료)"
+          />
+        </div>
+        
+        <div className="flex justify-center text-gray-400">⬇️ 병합 ⬇️</div>
+
+        <div>
+          <label className="block text-sm font-bold text-green-600 mb-1">통합될 ID (Target)</label>
+          <input 
+            type="number" 
+            className="w-full border p-2 rounded" 
+            value={form.targetId}
+            onChange={e => setForm({...form, targetId: e.target.value})}
+            placeholder="예: 1001 (정식 재료)"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">별명으로 쓸 이름 (옵션)</label>
+          <input 
+            className="w-full border p-2 rounded" 
+            value={form.synonym}
+            onChange={e => setForm({...form, synonym: e.target.value})}
+            placeholder="비워두면 원래 이름 사용"
+          />
+        </div>
+
+        <button 
+          onClick={() => mutation.mutate()}
+          className="w-full bg-slate-800 text-white py-3 rounded hover:bg-slate-900 font-bold"
+        >
+          병합 실행
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Main App Layout
+function App() {
+  const [baseUrl, setBaseUrl] = useState('https://YOUR_API_GATEWAY_URL.amazonaws.com/STAGE_NAME');
+  const [tab, setTab] = useState('search');
+  const client = createApiClient(baseUrl);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+        <ConfigHeader baseUrl={baseUrl} setBaseUrl={setBaseUrl} />
+        
+        <div className="flex flex-col md:flex-row h-[calc(100vh-64px)]">
+          {/* Sidebar */}
+          <aside className="w-full md:w-64 bg-white border-r flex-shrink-0">
+            <nav className="flex flex-col p-4 gap-2">
+              <button onClick={() => setTab('search')} className={`p-3 rounded text-left flex items-center gap-3 font-medium ${tab === 'search' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}>
+                <Search size={20} /> 검색 (Search)
+              </button>
+              <button onClick={() => setTab('create')} className={`p-3 rounded text-left flex items-center gap-3 font-medium ${tab === 'create' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}>
+                <Plus size={20} /> 등록 (Create)
+              </button>
+              <button onClick={() => setTab('range')} className={`p-3 rounded text-left flex items-center gap-3 font-medium ${tab === 'range' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}>
+                <ListFilter size={20} /> 번대 조회 (Ranges)
+              </button>
+              <button onClick={() => setTab('migration')} className={`p-3 rounded text-left flex items-center gap-3 font-medium ${tab === 'migration' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}>
+                <ArrowRightLeft size={20} /> 병합/관리 (Manage)
+              </button>
+            </nav>
+            <div className="mt-auto p-4 text-xs text-gray-400">
+              Admin Dashboard v1.0
+            </div>
+          </aside>
+
+          {/* Content Area */}
+          <main className="flex-1 overflow-y-auto bg-slate-50">
+            <div className="max-w-5xl mx-auto w-full">
+              {tab === 'search' && <SearchTab client={client} />}
+              {tab === 'create' && <CreateTab client={client} />}
+              {tab === 'range' && <RangeTab client={client} />}
+              {tab === 'migration' && <MigrationTab client={client} />}
+            </div>
+          </main>
+        </div>
+      </div>
+    </QueryClientProvider>
+  );
+}
+
+export default App;
+
+```
+
+---
+
+### ✅ 사용 방법
+
+1. Replit에서 위 코드들을 저장합니다.
+2. **[Run]** 버튼을 누릅니다.
+3. 우측 화면 상단 헤더에 있는 입력창에, 아까 만드신 **AWS API Gateway URL**을 붙여넣으세요.
+* 예: `https://w4b...amazonaws.com/stageAitracker`
+* *(주의: URL 끝에 슬래시 `/`는 빼는 게 좋습니다. 코드가 알아서 붙입니다.)*
+
+
+4. **검색 탭**에서 "양파"라고 쳐보세요.
+5. **범위 탭**에서 `3000번대`나 `9000번대`를 눌러보세요.
+
+이제 복잡한 SQL 쿼리 없이, 이 화면에서 재료를 추가하고 관리할 수 있습니다! 👍
