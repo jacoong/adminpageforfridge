@@ -1,16 +1,185 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import {
+  apiConfigSchema,
+  createFoodSchema,
+  patchFoodSchema,
+  deleteFoodSchema,
+  nicknameSchema,
+  migrationSchema,
+} from "@shared/schema";
+import { ZodError } from "zod";
+
+function getBaseUrl(req: any): string {
+  return req.app.locals.apiBaseUrl || "";
+}
+
+function handleZodError(res: any, err: ZodError) {
+  const messages = err.errors.map((e) => `${e.path.join(".")}: ${e.message}`);
+  return res.status(400).json({ error: "Validation failed", details: messages });
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
 
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+  app.post("/api/config", (req, res) => {
+    const result = apiConfigSchema.safeParse(req.body);
+    if (!result.success) return handleZodError(res, result.error);
+    req.app.locals.apiBaseUrl = result.data.baseUrl.replace(/\/$/, "");
+    res.json({ ok: true });
+  });
+
+  app.get("/api/config", (req, res) => {
+    res.json({ baseUrl: req.app.locals.apiBaseUrl || "" });
+  });
+
+  app.get("/api/search/:query", async (req, res) => {
+    const baseUrl = getBaseUrl(req);
+    if (!baseUrl) return res.status(400).json({ error: "API not configured. Set your AWS Gateway URL in settings." });
+    try {
+      const response = await fetch(`${baseUrl}/search?q=${encodeURIComponent(req.params.query)}`);
+      const data = await response.json();
+      res.json(data.data || []);
+    } catch (err: any) {
+      res.status(502).json({ error: `Failed to reach API: ${err.message}` });
+    }
+  });
+
+  app.get("/api/range/:digit", async (req, res) => {
+    const baseUrl = getBaseUrl(req);
+    if (!baseUrl) return res.status(400).json({ error: "API not configured. Set your AWS Gateway URL in settings." });
+    const digit = parseInt(req.params.digit);
+    if (isNaN(digit)) return res.status(400).json({ error: "Invalid digit number" });
+    try {
+      const response = await fetch(`${baseUrl}/getxdigititems?digitNumber=${digit}`);
+      const data = await response.json();
+      res.json(data.data || []);
+    } catch (err: any) {
+      res.status(502).json({ error: `Failed to reach API: ${err.message}` });
+    }
+  });
+
+  app.post("/api/food", async (req, res) => {
+    const baseUrl = getBaseUrl(req);
+    if (!baseUrl) return res.status(400).json({ error: "API not configured. Set your AWS Gateway URL in settings." });
+
+    const result = createFoodSchema.safeParse(req.body);
+    if (!result.success) return handleZodError(res, result.error);
+
+    const { type, digitNumber, label, masterName, ko, en } = result.data;
+
+    try {
+      let endpoint = "/createNewFood";
+      if (type === "mystery") endpoint = "/createMisteryFood";
+      if (type === "cuisine") endpoint = "/createCuisineFood";
+
+      const names: Record<string, string> = {};
+      if (ko) names.ko = ko;
+      if (en) names.en = en;
+
+      let payload: any;
+      if (type === "standard") {
+        payload = {
+          digitNumber: Number(digitNumber),
+          food: { masterName, label, names },
+        };
+      } else {
+        payload = { masterName, names };
+      }
+
+      const response = await fetch(`${baseUrl}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([payload]),
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      res.status(502).json({ error: `Failed to reach API: ${err.message}` });
+    }
+  });
+
+  app.patch("/api/fooditem", async (req, res) => {
+    const baseUrl = getBaseUrl(req);
+    if (!baseUrl) return res.status(400).json({ error: "API not configured. Set your AWS Gateway URL in settings." });
+
+    const result = patchFoodSchema.safeParse(req.body);
+    if (!result.success) return handleZodError(res, result.error);
+
+    try {
+      const response = await fetch(`${baseUrl}/patch/fooditem`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([result.data]),
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      res.status(502).json({ error: `Failed to reach API: ${err.message}` });
+    }
+  });
+
+  app.delete("/api/ingredient", async (req, res) => {
+    const baseUrl = getBaseUrl(req);
+    if (!baseUrl) return res.status(400).json({ error: "API not configured. Set your AWS Gateway URL in settings." });
+
+    const result = deleteFoodSchema.safeParse(req.body);
+    if (!result.success) return handleZodError(res, result.error);
+
+    try {
+      const response = await fetch(`${baseUrl}/delete/ingredient`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([{ id: result.data.id }]),
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      res.status(502).json({ error: `Failed to reach API: ${err.message}` });
+    }
+  });
+
+  app.post("/api/nickname", async (req, res) => {
+    const baseUrl = getBaseUrl(req);
+    if (!baseUrl) return res.status(400).json({ error: "API not configured. Set your AWS Gateway URL in settings." });
+
+    const result = nicknameSchema.safeParse(req.body);
+    if (!result.success) return handleZodError(res, result.error);
+
+    try {
+      const response = await fetch(`${baseUrl}/addNickname`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([result.data]),
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      res.status(502).json({ error: `Failed to reach API: ${err.message}` });
+    }
+  });
+
+  app.post("/api/migration", async (req, res) => {
+    const baseUrl = getBaseUrl(req);
+    if (!baseUrl) return res.status(400).json({ error: "API not configured. Set your AWS Gateway URL in settings." });
+
+    const result = migrationSchema.safeParse(req.body);
+    if (!result.success) return handleZodError(res, result.error);
+
+    try {
+      const response = await fetch(`${baseUrl}/migrationIngredientToNickname`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([result.data]),
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      res.status(502).json({ error: `Failed to reach API: ${err.message}` });
+    }
+  });
 
   return httpServer;
 }
