@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import {
   apiConfigSchema,
@@ -10,8 +10,11 @@ import {
 } from "@shared/schema";
 import { ZodError } from "zod";
 
+const ADMIN_USERNAME = "admin";
+const DEFAULT_BASE_URL = "https://w4bwrqmrv6.execute-api.ap-northeast-2.amazonaws.com/stageAitracker";
+
 function getBaseUrl(req: any): string {
-  return req.app.locals.apiBaseUrl || "";
+  return req.app.locals.apiBaseUrl || DEFAULT_BASE_URL;
 }
 
 function handleZodError(res: any, err: ZodError) {
@@ -19,10 +22,66 @@ function handleZodError(res: any, err: ZodError) {
   return res.status(400).json({ error: "Validation failed", details: messages });
 }
 
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (req.session && req.session.authenticated) {
+    return next();
+  }
+  return res.status(401).json({ error: "Not authenticated" });
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.locals.apiBaseUrl = DEFAULT_BASE_URL;
+
+  app.post("/api/auth/login", (req, res) => {
+    const { username, password } = req.body;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
+    if (!adminPassword) {
+      return res.status(500).json({ error: "Server not configured properly" });
+    }
+
+    if (username === ADMIN_USERNAME && password === adminPassword) {
+      req.session.authenticated = true;
+      return req.session.save((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Session error" });
+        }
+        res.json({ ok: true, username: ADMIN_USERNAME });
+      });
+    }
+
+    return res.status(401).json({ error: "Invalid username or password" });
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Logout failed" });
+      }
+      res.clearCookie("connect.sid");
+      res.json({ ok: true });
+    });
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    if (req.session && req.session.authenticated) {
+      return res.json({ authenticated: true, username: ADMIN_USERNAME });
+    }
+    return res.json({ authenticated: false });
+  });
+
+  app.use("/api/config", requireAuth);
+  app.use("/api/search", requireAuth);
+  app.use("/api/range", requireAuth);
+  app.use("/api/food", requireAuth);
+  app.use("/api/fooditem", requireAuth);
+  app.use("/api/ingredient", requireAuth);
+  app.use("/api/nickname", requireAuth);
+  app.use("/api/migration", requireAuth);
 
   app.post("/api/config", (req, res) => {
     const result = apiConfigSchema.safeParse(req.body);
