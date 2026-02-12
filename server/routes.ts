@@ -10,7 +10,6 @@ import {
 } from "@shared/schema";
 import { ZodError } from "zod";
 
-const ADMIN_USERNAME = "admin";
 const DEFAULT_BASE_URL = "https://w4bwrqmrv6.execute-api.ap-northeast-2.amazonaws.com/stageAitracker";
 
 function getBaseUrl(req: any): string {
@@ -36,25 +35,34 @@ export async function registerRoutes(
 
   app.locals.apiBaseUrl = DEFAULT_BASE_URL;
 
-  app.post("/api/auth/login", (req, res) => {
-    const { username, password } = req.body;
-    const adminPassword = process.env.ADMIN_PASSWORD;
-
-    if (!adminPassword) {
-      return res.status(500).json({ error: "Server not configured properly" });
+  app.post("/api/admin", async (req, res) => {
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ error: "Password is required" });
     }
 
-    if (username === ADMIN_USERNAME && password === adminPassword) {
-      req.session.authenticated = true;
-      return req.session.save((err) => {
-        if (err) {
-          return res.status(500).json({ error: "Session error" });
-        }
-        res.json({ ok: true, username: ADMIN_USERNAME });
+    const baseUrl = getBaseUrl(req);
+    try {
+      const awsRes = await fetch(`${baseUrl}/admin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
       });
-    }
 
-    return res.status(401).json({ error: "Invalid username or password" });
+      if (awsRes.ok) {
+        req.session.authenticated = true;
+        return req.session.save((err) => {
+          if (err) {
+            return res.status(500).json({ error: "Session error" });
+          }
+          res.json({ ok: true });
+        });
+      }
+
+      return res.status(401).json({ error: "Invalid password" });
+    } catch (err: any) {
+      return res.status(502).json({ error: `Unable to verify credentials: ${err.message}` });
+    }
   });
 
   app.post("/api/auth/logout", (req, res) => {

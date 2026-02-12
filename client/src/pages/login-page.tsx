@@ -3,7 +3,13 @@ import { Lock, Loader2, Database, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 
 interface LoginPageProps {
@@ -11,7 +17,6 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
-  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -19,14 +24,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) return;
+    if (!password.trim()) return;
 
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/admin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ password }),
         credentials: "include",
       });
       const data = await res.json();
@@ -35,7 +40,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       } else {
         toast({
           title: "Login Failed",
-          description: data.error || "Invalid username or password",
+          description: data.error || "Invalid password",
           variant: "destructive",
         });
       }
@@ -61,24 +66,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           </div>
           <CardTitle className="text-xl">Master Food Admin</CardTitle>
           <CardDescription>
-            Sign in to access the admin dashboard
+            Enter your password to access the dashboard
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
-                autoComplete="username"
-                autoFocus
-                data-testid="input-username"
-              />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
@@ -89,6 +81,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
                   autoComplete="current-password"
+                  autoFocus
                   className="pr-10"
                   data-testid="input-password"
                 />
@@ -100,14 +93,18 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   onClick={() => setShowPassword(!showPassword)}
                   data-testid="button-toggle-password"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </Button>
               </div>
             </div>
             <Button
               type="submit"
               className="w-full"
-              disabled={loading || !username.trim() || !password.trim()}
+              disabled={loading || !password.trim()}
               data-testid="button-login"
             >
               {loading ? (
