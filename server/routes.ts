@@ -36,7 +36,7 @@ export async function registerRoutes(
   app.locals.apiBaseUrl = DEFAULT_BASE_URL;
 
   app.post("/api/admin", async (req, res) => {
-    const { password } = req.body;
+    const { username, password } = req.body;
     if (!password) {
       return res.status(400).json({ error: "Password is required" });
     }
@@ -46,7 +46,7 @@ export async function registerRoutes(
       const awsRes = await fetch(`${baseUrl}/admin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
 
       if (awsRes.ok) {

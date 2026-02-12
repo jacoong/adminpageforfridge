@@ -17,6 +17,7 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -24,14 +25,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password.trim()) return;
+    if (!username.trim() || !password.trim()) return;
 
     setLoading(true);
     try {
       const res = await fetch("/api/admin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
         credentials: "include",
       });
       const data = await res.json();
@@ -66,11 +67,24 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           </div>
           <CardTitle className="text-xl">Master Food Admin</CardTitle>
           <CardDescription>
-            Enter your password to access the dashboard
+            Sign in to access the admin dashboard
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter username"
+                autoComplete="username"
+                autoFocus
+                data-testid="input-username"
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
@@ -104,7 +118,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <Button
               type="submit"
               className="w-full"
-              disabled={loading || !password.trim()}
+              disabled={loading || !username.trim() || !password.trim()}
               data-testid="button-login"
             >
               {loading ? (
