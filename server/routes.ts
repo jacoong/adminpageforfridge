@@ -11,7 +11,7 @@ import {
 } from "@shared/schema";
 import { ZodError } from "zod";
 
-const DEFAULT_BASE_URL = "https://w4bwrqmrv6.execute-api.ap-northeast-2.amazonaws.com/stageAitracker";
+const DEFAULT_BASE_URL = (process.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
 
 function getBaseUrl(req: any): string {
   return req.app.locals.apiBaseUrl || DEFAULT_BASE_URL;
