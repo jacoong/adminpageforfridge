@@ -3,17 +3,24 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-export default defineConfig(async ({ mode }) => {
+export default defineConfig(async ({ mode, command }) => {
   const workspaceRoot = path.resolve(import.meta.dirname);
   const env = loadEnv(mode, workspaceRoot, "");
   const configuredBase = (env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
 
   let proxyTarget: string | undefined;
   let proxyBasePath = "";
-  if (configuredBase) {
-    const parsed = new URL(configuredBase);
-    proxyTarget = `${parsed.protocol}//${parsed.host}`;
-    proxyBasePath = parsed.pathname === "/" ? "" : parsed.pathname;
+  if (command === "serve" && configuredBase) {
+    try {
+      const parsed = new URL(configuredBase);
+      proxyTarget = `${parsed.protocol}//${parsed.host}`;
+      proxyBasePath = parsed.pathname === "/" ? "" : parsed.pathname;
+    } catch {
+      console.warn(
+        `[vite] Ignoring invalid VITE_API_BASE_URL: ${configuredBase}. ` +
+          "Expected format: https://host/path",
+      );
+    }
   }
 
   return {
