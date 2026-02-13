@@ -54,11 +54,11 @@ export function ApiConfigHeader() {
           <DialogHeader>
             <DialogTitle>API Configuration</DialogTitle>
             <DialogDescription>
-              Enter your AWS API Gateway URL to connect the dashboard to your backend.
+              Enter your FastAPI Lambda base URL to connect the dashboard.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <label className="text-sm font-medium">Gateway URL</label>
+            <label className="text-sm font-medium">Base URL</label>
             <Input
               value={inputUrl}
               onChange={(e) => setInputUrl(e.target.value)}

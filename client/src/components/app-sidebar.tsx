@@ -1,5 +1,5 @@
 import { useLocation, Link } from "wouter";
-import { Search, Plus, ListFilter, ArrowRightLeft, BookmarkPlus, Database } from "lucide-react";
+import { Search, Plus, ArrowRightLeft, Database } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -15,11 +15,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 const navItems = [
-  { title: "Search", path: "/", icon: Search, description: "Find ingredients" },
-  { title: "Create", path: "/create", icon: Plus, description: "Add new food" },
-  { title: "Browse", path: "/browse", icon: ListFilter, description: "Range query" },
-  { title: "Nicknames", path: "/nicknames", icon: BookmarkPlus, description: "Add nicknames" },
-  { title: "Migration", path: "/migration", icon: ArrowRightLeft, description: "Merge items" },
+  { key: "search", title: "Search", path: "/", icon: Search, description: "Find ingredients" },
+  { key: "management", title: "Create/Delete", path: "/create", icon: Plus, description: "Manage payloads" },
+  { key: "migration", title: "Migration", path: "/migration", icon: ArrowRightLeft, description: "Merge items" },
 ];
 
 export function AppSidebar() {
@@ -46,11 +44,11 @@ export function AppSidebar() {
               {navItems.map((item) => {
                 const isActive = location === item.path;
                 return (
-                  <SidebarMenuItem key={item.title}>
+                  <SidebarMenuItem key={item.key}>
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      data-testid={`nav-${item.title.toLowerCase()}`}
+                      data-testid={`nav-${item.key}`}
                     >
                       <Link href={item.path}>
                         <item.icon className="w-4 h-4" />

@@ -1,5 +1,50 @@
 import { z } from "zod";
 
+export const FOOD_LABELS = [
+  "egg",
+  "fish",
+  "seafood",
+  "meat",
+  "poultry",
+  "processed_meat",
+  "dairy",
+  "cheese",
+  "yogurt",
+  "vegetable",
+  "fruit",
+  "legume",
+  "nut",
+  "seed",
+  "grain",
+  "rice",
+  "noodle",
+  "bread",
+  "oil",
+  "sauce",
+  "spice",
+  "raw",
+  "cooked",
+  "fermented",
+  "snack",
+  "dessert",
+  "beverage",
+  "leftover",
+  "other",
+] as const;
+
+export const SUPPORTED_LANGUAGE_CODES = [
+  "ko",
+  "en",
+  "ja",
+  "zh",
+  "fr",
+  "es",
+  "it",
+  "de",
+  "vi",
+  "th",
+] as const;
+
 export const foodItemSchema = z.object({
   id: z.number(),
   master_name: z.string(),
@@ -9,14 +54,55 @@ export const foodItemSchema = z.object({
 
 export type FoodItem = z.infer<typeof foodItemSchema>;
 
-export const createFoodSchema = z.object({
-  type: z.enum(["standard", "mystery", "cuisine"]),
-  digitNumber: z.number().optional(),
-  label: z.string().optional(),
-  masterName: z.string().min(1, "Master name is required"),
-  ko: z.string().optional(),
-  en: z.string().optional(),
-});
+const localizedNamesSchema = z.record(z.string().min(1, "Name value is required")).optional();
+
+export const createFoodSchema = z
+  .object({
+    type: z.enum(["standard", "mystery", "cuisine"]),
+    digitNumber: z.number().optional(),
+    label: z.enum(FOOD_LABELS).optional(),
+    masterName: z.string().min(1, "Master name is required"),
+    names: localizedNamesSchema,
+  })
+  .superRefine((value, ctx) => {
+    if (value.names) {
+      for (const [lang, name] of Object.entries(value.names)) {
+        if (name.trim().length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["names", lang],
+            message: "Name value is required",
+          });
+        }
+      }
+    }
+
+    if (value.type === "standard") {
+      if (typeof value.digitNumber !== "number" || Number.isNaN(value.digitNumber)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["digitNumber"],
+          message: "Digit range is required for standard food",
+        });
+      }
+
+      if (!value.label) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["label"],
+          message: "Label is required for standard food",
+        });
+      }
+
+      if (!value.names || Object.keys(value.names).length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["names"],
+          message: "Localized names are required for standard food",
+        });
+      }
+    }
+  });
 
 export type CreateFoodInput = z.infer<typeof createFoodSchema>;
 

@@ -11,6 +11,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { login } from "@/lib/auth";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -29,26 +30,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/admin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        onLogin();
-      } else {
-        toast({
-          title: "Login Failed",
-          description: data.error || "Invalid password",
-          variant: "destructive",
-        });
-      }
-    } catch {
+      await login(username, password);
+      onLogin();
+    } catch (error) {
       toast({
-        title: "Error",
-        description: "Unable to connect to server",
+        title: "Login Failed",
+        description: error instanceof Error ? error.message : "Unable to sign in",
         variant: "destructive",
       });
     } finally {

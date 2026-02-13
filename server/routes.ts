@@ -7,6 +7,7 @@ import {
   deleteFoodSchema,
   nicknameSchema,
   migrationSchema,
+  SUPPORTED_LANGUAGE_CODES,
 } from "@shared/schema";
 import { ZodError } from "zod";
 
@@ -77,7 +78,7 @@ export async function registerRoutes(
 
   app.get("/api/auth/me", (req, res) => {
     if (req.session && req.session.authenticated) {
-      return res.json({ authenticated: true, username: ADMIN_USERNAME });
+      return res.json({ authenticated: true });
     }
     return res.json({ authenticated: false });
   });
@@ -135,25 +136,46 @@ export async function registerRoutes(
     const result = createFoodSchema.safeParse(req.body);
     if (!result.success) return handleZodError(res, result.error);
 
-    const { type, digitNumber, label, masterName, ko, en } = result.data;
+    const { type, digitNumber, label, masterName, names } = result.data;
 
     try {
       let endpoint = "/createNewFood";
       if (type === "mystery") endpoint = "/createMisteryFood";
       if (type === "cuisine") endpoint = "/createCuisineFood";
 
-      const names: Record<string, string> = {};
-      if (ko) names.ko = ko;
-      if (en) names.en = en;
+      const normalizedMasterName = masterName.trim();
+      const normalizedNames: Record<string, string> = {};
+      for (const [lang, value] of Object.entries(names || {})) {
+        const trimmed = value.trim();
+        if (trimmed.length > 0) {
+          normalizedNames[lang] = trimmed;
+        }
+      }
+
+      if (type !== "standard" && Object.keys(normalizedNames).length === 0) {
+        for (const langCode of SUPPORTED_LANGUAGE_CODES) {
+          normalizedNames[langCode] = normalizedMasterName;
+        }
+      }
 
       let payload: any;
       if (type === "standard") {
+        if (!label) {
+          return res.status(400).json({ error: "Label is required for standard food" });
+        }
+        if (typeof digitNumber !== "number" || Number.isNaN(digitNumber)) {
+          return res.status(400).json({ error: "Digit range is required for standard food" });
+        }
+        if (Object.keys(normalizedNames).length === 0) {
+          return res.status(400).json({ error: "Localized names are required for standard food" });
+        }
+
         payload = {
           digitNumber: Number(digitNumber),
-          food: { masterName, label, names },
+          food: { masterName: normalizedMasterName, label, names: normalizedNames },
         };
       } else {
-        payload = { masterName, names };
+        payload = { masterName: normalizedMasterName, names: normalizedNames };
       }
 
       const response = await fetch(`${baseUrl}${endpoint}`, {

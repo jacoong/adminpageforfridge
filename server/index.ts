@@ -32,6 +32,7 @@ app.use(express.urlencoded({ extended: false }));
 
 const MemoryStore = MemoryStoreFactory(session);
 const isProduction = process.env.NODE_ENV === "production";
+const isApiOnly = process.env.API_ONLY === "true";
 
 if (isProduction && !process.env.SESSION_SECRET) {
   console.error("FATAL: SESSION_SECRET must be set in production");
@@ -109,7 +110,9 @@ app.use((req, res, next) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  if (process.env.NODE_ENV === "production") {
+  if (isApiOnly) {
+    log("API-only mode enabled; skipping client serving");
+  } else if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
     const { setupVite } = await import("./vite");
