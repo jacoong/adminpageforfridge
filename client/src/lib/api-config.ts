@@ -7,7 +7,8 @@ interface ApiConfigStore {
 
 export const STORAGE_KEY = "master_food_admin_api_url";
 export const DEV_PROXY_BASE_URL = "/api-proxy";
-const USE_LOCAL_PROXY = import.meta.env.VITE_API_USE_PROXY === "true";
+const USE_LOCAL_PROXY =
+  import.meta.env.DEV && import.meta.env.VITE_API_USE_PROXY === "true";
 
 export const normalizeBaseUrl = (url: string): string =>
   url.trim().replace(/\/$/, "");
