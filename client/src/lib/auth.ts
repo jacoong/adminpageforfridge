@@ -1,7 +1,11 @@
 import axios from "axios";
-import { apiClient } from "./http";
-
-const AUTH_STORAGE_KEY = "master_food_admin_authenticated";
+import { apiClient, setApiKeyHeader } from "./http";
+import {
+  clearStoredAuthSession,
+  getStoredApiKey,
+  isStoredAuthenticated,
+  persistAuthSession,
+} from "./auth-storage";
 
 function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -24,23 +28,32 @@ function getErrorMessage(error: unknown): string {
 }
 
 export function isAuthenticated(): boolean {
-  try {
-    return localStorage.getItem(AUTH_STORAGE_KEY) === "true";
-  } catch {
-    return false;
+  const authenticated = isStoredAuthenticated();
+  if (authenticated) {
+    setApiKeyHeader(getStoredApiKey());
+  } else {
+    setApiKeyHeader("");
   }
+  return authenticated;
 }
 
 export function logout(): void {
-  try {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-  } catch {}
+  clearStoredAuthSession();
+  setApiKeyHeader("");
 }
 
 export async function login(username: string, password: string): Promise<void> {
   try {
-    await apiClient.post("/admin", { username, password });
-    localStorage.setItem(AUTH_STORAGE_KEY, "true");
+    const response = await apiClient.post<{ api_key?: string }>("/admin", {
+      username,
+      password,
+    });
+    const apiKey = String(response.data?.api_key || "").trim();
+    if (!apiKey) {
+      throw new Error("Login response is missing api_key");
+    }
+    persistAuthSession(apiKey);
+    setApiKeyHeader(apiKey);
   } catch (error) {
     throw new Error(getErrorMessage(error));
   }
