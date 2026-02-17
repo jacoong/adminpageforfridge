@@ -376,6 +376,24 @@ export const getQueryFn = <T>({
         return unwrapData<T>(res.data);
       }
 
+      if (route === "/api/nicknames/by-id") {
+        const nicknameId = Number(value);
+        if (!Number.isInteger(nicknameId) || nicknameId <= 0) {
+          return [] as T;
+        }
+
+        const res = await apiClient.get("/get/nickName/byId", {
+          params: { id: nicknameId },
+        });
+        let payload: unknown = res.data;
+        if (payload && typeof payload === "object" && "data" in payload) {
+          payload = (payload as { data: unknown }).data;
+        }
+        if (Array.isArray(payload)) return payload as T;
+        if (payload && typeof payload === "object") return [payload] as T;
+        return [] as T;
+      }
+
       if (route === "/api/nicknames/search") {
         const nickname = String(value ?? "").trim();
         if (!nickname) {

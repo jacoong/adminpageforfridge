@@ -57,6 +57,7 @@ type SearchRequest =
   | { target: "ingredient"; route: "/api/range"; value: number }
   | { target: "ingredient"; route: "/api/ingredients"; value: number[] }
   | { target: "nickname"; route: "/api/nicknames/by-ingredient"; value: number }
+  | { target: "nickname"; route: "/api/nicknames/by-id"; value: number }
   | { target: "nickname"; route: "/api/nicknames/search"; value: string };
 
 type NicknameItem = {
@@ -82,6 +83,7 @@ type SearchPageStateSnapshot = {
   selectedRange: number;
   idsInput: string;
   nicknameIngredientId: string;
+  nicknameIdInput: string;
   nicknameKeywordInput: string;
   searchRequest: SearchRequest | null;
 };
@@ -93,6 +95,7 @@ const DEFAULT_SEARCH_STATE: SearchPageStateSnapshot = {
   selectedRange: 1000,
   idsInput: "",
   nicknameIngredientId: "",
+  nicknameIdInput: "",
   nicknameKeywordInput: "",
   searchRequest: null,
 };
@@ -187,6 +190,13 @@ function normalizeSearchRequest(raw: unknown): SearchRequest | null {
   }
   if (
     candidate.target === "nickname" &&
+    candidate.route === "/api/nicknames/by-id" &&
+    typeof candidate.value === "number"
+  ) {
+    return { target: "nickname", route: "/api/nicknames/by-id", value: candidate.value };
+  }
+  if (
+    candidate.target === "nickname" &&
     candidate.route === "/api/nicknames/search" &&
     typeof candidate.value === "string"
   ) {
@@ -209,6 +219,7 @@ function loadSearchState(): SearchPageStateSnapshot {
       selectedRange: Number.isInteger(selectedRange) && selectedRange > 0 ? selectedRange : 1000,
       idsInput: typeof parsed.idsInput === "string" ? parsed.idsInput : "",
       nicknameIngredientId: typeof parsed.nicknameIngredientId === "string" ? parsed.nicknameIngredientId : "",
+      nicknameIdInput: typeof parsed.nicknameIdInput === "string" ? parsed.nicknameIdInput : "",
       nicknameKeywordInput: typeof parsed.nicknameKeywordInput === "string" ? parsed.nicknameKeywordInput : "",
       searchRequest: normalizeSearchRequest(parsed.searchRequest),
     };
@@ -227,6 +238,7 @@ export default function SearchPage() {
   const [selectedRange, setSelectedRange] = useState<number>(initialState.selectedRange);
   const [idsInput, setIdsInput] = useState(initialState.idsInput);
   const [nicknameIngredientId, setNicknameIngredientId] = useState(initialState.nicknameIngredientId);
+  const [nicknameIdInput, setNicknameIdInput] = useState(initialState.nicknameIdInput);
   const [nicknameKeywordInput, setNicknameKeywordInput] = useState(initialState.nicknameKeywordInput);
   const [searchRequest, setSearchRequest] = useState<SearchRequest | null>(initialState.searchRequest);
 
@@ -258,15 +270,17 @@ export default function SearchPage() {
       selectedRange,
       idsInput,
       nicknameIngredientId,
+      nicknameIdInput,
       nicknameKeywordInput,
       searchRequest,
     };
     sessionStorage.setItem(SEARCH_STATE_STORAGE_KEY, JSON.stringify(payload));
-  }, [target, ingredientMode, keywordInput, selectedRange, idsInput, nicknameIngredientId, nicknameKeywordInput, searchRequest]);
+  }, [target, ingredientMode, keywordInput, selectedRange, idsInput, nicknameIngredientId, nicknameIdInput, nicknameKeywordInput, searchRequest]);
 
   const results = rawResults ?? [];
   const parsedIds = useMemo(() => parseIdList(idsInput), [idsInput]);
   const parsedNicknameIngredientId = Number(nicknameIngredientId);
+  const parsedNicknameId = Number(nicknameIdInput);
 
   const ingredientResults = useMemo(
     () =>
@@ -278,7 +292,8 @@ export default function SearchPage() {
 
   const nicknameResults = useMemo(
     () =>
-      searchRequest?.target === "nickname" && searchRequest.route === "/api/nicknames/by-ingredient"
+      searchRequest?.target === "nickname" &&
+      (searchRequest.route === "/api/nicknames/by-ingredient" || searchRequest.route === "/api/nicknames/by-id")
         ? (results as NicknameItem[])
         : [],
     [results, searchRequest],
@@ -297,6 +312,7 @@ export default function SearchPage() {
     if (searchRequest.route === "/api/search") return `Ingredient keyword: "${searchRequest.value}"`;
     if (searchRequest.route === "/api/range") return `Ingredient range: ${searchRequest.value}-${searchRequest.value + 999}`;
     if (searchRequest.route === "/api/ingredients") return `Ingredient IDs: ${searchRequest.value.join(", ")}`;
+    if (searchRequest.route === "/api/nicknames/by-id") return `Nickname ID: ${searchRequest.value}`;
     if (searchRequest.route === "/api/nicknames/search") return `Nickname keyword: "${searchRequest.value}"`;
     return `Nickname ingredient_id: ${searchRequest.value}`;
   }, [searchRequest]);
@@ -304,7 +320,9 @@ export default function SearchPage() {
   const hasVisibleResults = useMemo(() => {
     if (!searchRequest) return false;
     if (searchRequest.target === "ingredient") return ingredientResults.length > 0;
-    if (searchRequest.route === "/api/nicknames/by-ingredient") return nicknameResults.length > 0;
+    if (searchRequest.route === "/api/nicknames/by-ingredient" || searchRequest.route === "/api/nicknames/by-id") {
+      return nicknameResults.length > 0;
+    }
     return nicknameSearchGroups.some((group) => (group.data?.length ?? 0) > 0);
   }, [searchRequest, ingredientResults, nicknameResults, nicknameSearchGroups]);
 
@@ -343,6 +361,22 @@ export default function SearchPage() {
       target: "nickname",
       route: "/api/nicknames/by-ingredient",
       value: parsedNicknameIngredientId,
+    });
+  };
+
+  const runNicknameByIdSearch = () => {
+    if (!Number.isInteger(parsedNicknameId) || parsedNicknameId <= 0) {
+      toast({
+        title: "Invalid nickname id",
+        description: "Enter a valid numeric nickname id.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSearchRequest({
+      target: "nickname",
+      route: "/api/nicknames/by-id",
+      value: parsedNicknameId,
     });
   };
 
@@ -570,9 +604,7 @@ export default function SearchPage() {
         <TabsContent value="nickname" className="space-y-3">
           <Card>
             <CardContent className="p-4 space-y-3">
-              <p className="text-sm text-muted-foreground">
-                GET <code>/get/nickName?ingredient_id=1001</code>
-              </p>
+              <p className="text-sm text-muted-foreground">Search by ingredient ID</p>
               <div className="flex gap-2">
                 <Input
                   placeholder="ingredient_id (e.g. 1001)"
@@ -593,9 +625,7 @@ export default function SearchPage() {
                 </Button>
               </div>
               <div className="h-px bg-border" />
-              <p className="text-sm text-muted-foreground">
-                GET <code>/get/nickName/search?nickname=적양파</code>
-              </p>
+              <p className="text-sm text-muted-foreground">Search by nickname keyword</p>
               <div className="flex gap-2">
                 <Input
                   placeholder="nickname keyword (e.g. 적양파)"
@@ -612,6 +642,27 @@ export default function SearchPage() {
                 >
                   <Tags className="w-4 h-4 mr-2" />
                   Search By Nickname
+                </Button>
+              </div>
+              <div className="h-px bg-border" />
+              <p className="text-sm text-muted-foreground">Search by nickname ID</p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="nickname id (e.g. 40169)"
+                  value={nicknameIdInput}
+                  onChange={(e) => setNicknameIdInput(sanitizeDigitInput(e.target.value))}
+                  onKeyDown={(e) => e.key === "Enter" && runNicknameByIdSearch()}
+                  inputMode="numeric"
+                  className="flex-1"
+                  data-testid="input-search-nickname-id"
+                />
+                <Button
+                  onClick={runNicknameByIdSearch}
+                  disabled={!nicknameIdInput.trim()}
+                  data-testid="button-search-nickname-id"
+                >
+                  <Hash className="w-4 h-4 mr-2" />
+                  Search By ID
                 </Button>
               </div>
             </CardContent>
@@ -653,7 +704,7 @@ export default function SearchPage() {
             <p className="text-muted-foreground">
               {target === "ingredient"
                 ? "Choose an ingredient search mode and press Search"
-                : "Enter ingredient_id or nickname keyword and search"}
+                : "Enter ingredient_id, nickname keyword, or nickname ID and search"}
             </p>
           </CardContent>
         </Card>
@@ -719,7 +770,7 @@ export default function SearchPage() {
       )}
 
       {searchRequest?.target === "nickname" &&
-        searchRequest.route === "/api/nicknames/by-ingredient" &&
+        (searchRequest.route === "/api/nicknames/by-ingredient" || searchRequest.route === "/api/nicknames/by-id") &&
         nicknameResults.length > 0 && (
         <Card>
           <CardContent className="p-0">
