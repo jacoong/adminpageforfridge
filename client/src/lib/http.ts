@@ -2,13 +2,6 @@ import axios from "axios";
 import { getApiBaseUrl } from "./api-config";
 import { getStoredApiKey } from "./auth-storage";
 
-const POST_LOGIN_BASE_URL = (
-  import.meta.env.VITE_API_AFTER_LOGIN_BASE_URL ||
-  "https://w4bwrqmrv6.execute-api.ap-northeast-2.amazonaws.com/stageAitracker"
-)
-  .trim()
-  .replace(/\/$/, "");
-
 export const apiClient = axios.create({
   // Explicit CORS-related behavior for browser requests.
   withCredentials: false,
@@ -30,14 +23,9 @@ export function setApiKeyHeader(apiKey: string): void {
 
 apiClient.interceptors.request.use((config) => {
   const isLoginRequest = String(config.url || "").replace(/\/+$/, "") === "/admin";
-  const loginBaseUrl = getApiBaseUrl();
-  const baseUrl = isLoginRequest ? loginBaseUrl : POST_LOGIN_BASE_URL;
+  const baseUrl = getApiBaseUrl();
   if (!baseUrl) {
-    throw new Error(
-      isLoginRequest
-        ? "Login API base URL is not configured"
-        : "Post-login API base URL is not configured",
-    );
+    throw new Error("API base URL is not configured");
   }
 
   const apiKey = getStoredApiKey();

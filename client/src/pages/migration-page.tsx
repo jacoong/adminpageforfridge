@@ -133,7 +133,7 @@ export default function MigrationPage() {
     onSuccess: () => {
       toast({
         title: "Migration Complete",
-        description: `${newFoodPayload.length} row(s) sent to migrationNewFood.`,
+        description: `${newFoodPayload.length} row(s) processed successfully.`,
       });
     },
     onError: (err: Error) => {
@@ -148,7 +148,7 @@ export default function MigrationPage() {
     onSuccess: () => {
       toast({
         title: "Migration Complete",
-        description: `${nicknamePayload.length} row(s) sent to migrationIngredientToNickname.`,
+        description: `${nicknamePayload.length} row(s) processed successfully.`,
       });
     },
     onError: (err: Error) => {
@@ -181,7 +181,7 @@ export default function MigrationPage() {
             x번대 id 를 y번대 id로 이전
           </CardTitle>
           <CardDescription>
-            POST <code>/migrationNewFood</code> body: [{"{"}"source_id":3211,"target_digit_number":5000{"}"}]
+            Source ID를 선택한 target digit 범위로 이전합니다.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -285,7 +285,7 @@ export default function MigrationPage() {
             ingredient 를 nickname 으로 이전
           </CardTitle>
           <CardDescription>
-            POST <code>/migrationIngredientToNickname</code> body: [{"{"}"source_id":3213,"ingredient_id":1001,"lang_code":"ko","synonym":"test"{"}"}]
+            Source ID를 지정한 ingredient nickname으로 이전합니다.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

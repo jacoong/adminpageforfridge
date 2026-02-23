@@ -241,6 +241,7 @@ export default function SearchPage() {
   const [nicknameIdInput, setNicknameIdInput] = useState(initialState.nicknameIdInput);
   const [nicknameKeywordInput, setNicknameKeywordInput] = useState(initialState.nicknameKeywordInput);
   const [searchRequest, setSearchRequest] = useState<SearchRequest | null>(initialState.searchRequest);
+  const [searchRunToken, setSearchRunToken] = useState(0);
 
   const [editItem, setEditItem] = useState<FoodItem | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -253,8 +254,8 @@ export default function SearchPage() {
   const [nicknameEditLangCode, setNicknameEditLangCode] = useState("ko");
 
   const activeQueryKey = searchRequest
-    ? ([searchRequest.route, searchRequest.value] as const)
-    : (["/api/search", ""] as const);
+    ? ([searchRequest.route, searchRequest.value, searchRunToken] as const)
+    : (["/api/search", "", 0] as const);
 
   const { data: rawResults, isLoading, isFetching } = useQuery<SearchResultItem[]>({
     queryKey: activeQueryKey,
@@ -329,10 +330,12 @@ export default function SearchPage() {
   const runKeywordSearch = () => {
     const term = keywordInput.trim();
     if (!term) return;
+    setSearchRunToken((prev) => prev + 1);
     setSearchRequest({ target: "ingredient", route: "/api/search", value: term });
   };
 
   const runRangeSearch = () => {
+    setSearchRunToken((prev) => prev + 1);
     setSearchRequest({ target: "ingredient", route: "/api/range", value: selectedRange });
   };
 
@@ -345,6 +348,7 @@ export default function SearchPage() {
       });
       return;
     }
+    setSearchRunToken((prev) => prev + 1);
     setSearchRequest({ target: "ingredient", route: "/api/ingredients", value: parsedIds });
   };
 
@@ -362,6 +366,7 @@ export default function SearchPage() {
       route: "/api/nicknames/by-ingredient",
       value: parsedNicknameIngredientId,
     });
+    setSearchRunToken((prev) => prev + 1);
   };
 
   const runNicknameByIdSearch = () => {
@@ -378,6 +383,7 @@ export default function SearchPage() {
       route: "/api/nicknames/by-id",
       value: parsedNicknameId,
     });
+    setSearchRunToken((prev) => prev + 1);
   };
 
   const runNicknameKeywordSearch = () => {
@@ -395,12 +401,21 @@ export default function SearchPage() {
       route: "/api/nicknames/search",
       value: keyword,
     });
+    setSearchRunToken((prev) => prev + 1);
   };
 
-  const invalidateCurrentSearch = () => {
+  const invalidateCurrentSearch = async () => {
     if (!searchRequest) return;
-    queryClient.invalidateQueries({
-      queryKey: [searchRequest.route, searchRequest.value],
+    const queryKeyPrefix = [searchRequest.route, searchRequest.value] as const;
+
+    if (searchRequest.route === "/api/nicknames/by-id") {
+      queryClient.setQueriesData({ queryKey: queryKeyPrefix }, []);
+    }
+
+    setSearchRunToken((prev) => prev + 1);
+
+    await queryClient.invalidateQueries({
+      queryKey: queryKeyPrefix,
     });
   };
 
@@ -410,7 +425,7 @@ export default function SearchPage() {
     },
     onSuccess: () => {
       toast({ title: "Deleted", description: "Item has been removed successfully." });
-      invalidateCurrentSearch();
+      void invalidateCurrentSearch();
       setDeleteId(null);
     },
     onError: (err: Error) => {
@@ -424,7 +439,7 @@ export default function SearchPage() {
     },
     onSuccess: () => {
       toast({ title: "Updated", description: "Item has been updated successfully." });
-      invalidateCurrentSearch();
+      void invalidateCurrentSearch();
       setEditOpen(false);
       setEditItem(null);
     },
@@ -439,7 +454,7 @@ export default function SearchPage() {
     },
     onSuccess: () => {
       toast({ title: "Deleted", description: "Nickname has been removed successfully." });
-      invalidateCurrentSearch();
+      void invalidateCurrentSearch();
       setNicknameDeleteId(null);
     },
     onError: (err: Error) => {
@@ -453,7 +468,7 @@ export default function SearchPage() {
     },
     onSuccess: () => {
       toast({ title: "Updated", description: "Nickname has been updated successfully." });
-      invalidateCurrentSearch();
+      void invalidateCurrentSearch();
       setNicknameEditOpen(false);
       setNicknameEditItem(null);
     },
