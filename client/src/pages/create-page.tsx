@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, Loader2, Utensils, HelpCircle, ChefHat, Trash2, BookmarkPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,56 +15,18 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  FALLBACK_INGREDIENT_CATEGORIES,
+  INGREDIENT_CATEGORIES_QUERY_KEY,
+  fetchIngredientCategories,
+  findIngredientCategory,
+  formatCategoryOptionLabel,
+  formatCategoryRange,
+} from "@/lib/ingredient-categories";
 
 type CrudTab = "create" | "delete";
 type EntityType = "ingredient" | "nickname";
 type FoodType = "standard" | "mystery" | "cuisine";
-
-const STANDARD_DIGIT_RANGES = [
-  "1000",
-  "2000",
-  "3000",
-  "4000",
-  "5000",
-  "6000",
-  "7000",
-  "8000",
-  "9000",
-] as const;
-
-const STANDARD_LABELS = [
-  "egg",
-  "fish",
-  "seafood",
-  "meat",
-  "poultry",
-  "processed_meat",
-  "dairy",
-  "cheese",
-  "yogurt",
-  "vegetable",
-  "fruit",
-  "legume",
-  "nut",
-  "seed",
-  "grain",
-  "rice",
-  "noodle",
-  "bread",
-  "oil",
-  "sauce",
-  "spice",
-  "raw",
-  "cooked",
-  "fermented",
-  "snack",
-  "dessert",
-  "beverage",
-  "leftover",
-  "other",
-] as const;
-
-type StandardLabel = (typeof STANDARD_LABELS)[number];
 
 const LANGUAGE_CODES = [
   "ko",
@@ -155,8 +117,8 @@ export default function CreatePage() {
   const [deleteEntity, setDeleteEntity] = useState<EntityType>("ingredient");
 
   const [type, setType] = useState<FoodType>("standard");
-  const [digitNumber, setDigitNumber] = useState("1000");
-  const [label, setLabel] = useState<StandardLabel>("vegetable");
+  const [standardCategoryLabel, setStandardCategoryLabel] = useState("vegetable");
+  const [standardLabel, setStandardLabel] = useState("vegetable");
   const [masterName, setMasterName] = useState("");
   const [names, setNames] = useState<Record<LanguageCode, string>>(createEmptyNamesMap);
 
@@ -166,6 +128,51 @@ export default function CreatePage() {
 
   const [ingredientDeleteIdsInput, setIngredientDeleteIdsInput] = useState("");
   const [nicknameDeleteIdsInput, setNicknameDeleteIdsInput] = useState("");
+
+  const { data: ingredientCategories = FALLBACK_INGREDIENT_CATEGORIES } = useQuery({
+    queryKey: [...INGREDIENT_CATEGORIES_QUERY_KEY],
+    queryFn: fetchIngredientCategories,
+    initialData: FALLBACK_INGREDIENT_CATEGORIES,
+  });
+
+  const standardCategories = useMemo(
+    () =>
+      ingredientCategories.filter(
+        (category) => category.label !== "mystery" && category.label !== "cuisine",
+      ),
+    [ingredientCategories],
+  );
+
+  const selectedStandardCategory = useMemo(
+    () =>
+      findIngredientCategory(standardCategories, standardCategoryLabel)
+      ?? standardCategories[0]
+      ?? FALLBACK_INGREDIENT_CATEGORIES[0],
+    [standardCategories, standardCategoryLabel],
+  );
+
+  const selectedStandardLabel = useMemo(
+    () =>
+      findIngredientCategory(standardCategories, standardLabel)
+      ?? selectedStandardCategory,
+    [selectedStandardCategory, standardCategories, standardLabel],
+  );
+
+  const mysteryCategory = useMemo(
+    () =>
+      findIngredientCategory(ingredientCategories, "mystery")
+      ?? findIngredientCategory(FALLBACK_INGREDIENT_CATEGORIES, "mystery")
+      ?? FALLBACK_INGREDIENT_CATEGORIES[0],
+    [ingredientCategories],
+  );
+
+  const cuisineCategory = useMemo(
+    () =>
+      findIngredientCategory(ingredientCategories, "cuisine")
+      ?? findIngredientCategory(FALLBACK_INGREDIENT_CATEGORIES, "cuisine")
+      ?? FALLBACK_INGREDIENT_CATEGORIES[0],
+    [ingredientCategories],
+  );
 
   const updateCreateName = (code: LanguageCode, value: string) => {
     setNames((prev) => ({ ...prev, [code]: value }));
@@ -179,14 +186,14 @@ export default function CreatePage() {
         type === "standard"
           ? {
               type,
-              digitNumber: Number(digitNumber),
-              label,
+              digitNumber: selectedStandardCategory.startId,
+              label: selectedStandardLabel.label,
               masterName: normalizedMasterName,
               names: normalizeNamesMap(names),
             }
           : {
               type,
-              digitNumber: type === "mystery" ? 9000 : 8000,
+              digitNumber: type === "mystery" ? mysteryCategory.startId : cuisineCategory.startId,
               masterName: normalizedMasterName,
               names: buildAutoNamesMap(normalizedMasterName),
             };
@@ -316,44 +323,64 @@ export default function CreatePage() {
                 </TabsList>
 
                 <TabsContent value="standard">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Standard Ingredient</CardTitle>
-                      <CardDescription>Digit + label + master_name + all names required</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Digit Range</Label>
-                          <Select value={digitNumber} onValueChange={setDigitNumber}>
-                            <SelectTrigger data-testid="select-digit-number">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STANDARD_DIGIT_RANGES.map((range) => (
-                                <SelectItem key={range} value={range}>
-                                  {range} Range
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Standard Ingredient</CardTitle>
+                        <CardDescription>
+                          Select a category range. The label follows the selected range automatically.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Digit Range</Label>
+                            <Select
+                              value={selectedStandardCategory.label}
+                              onValueChange={(value) => {
+                                setStandardCategoryLabel(value);
+                                setStandardLabel(value);
+                              }}
+                            >
+                              <SelectTrigger data-testid="select-digit-number">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {standardCategories.map((category) => (
+                                  <SelectItem key={category.label} value={category.label}>
+                                    {formatCategoryOptionLabel(category)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              start_id {selectedStandardCategory.startId}, ids {formatCategoryRange(selectedStandardCategory)}
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Label</Label>
+                            <Select
+                              value={selectedStandardLabel.label}
+                              onValueChange={setStandardLabel}
+                            >
+                              <SelectTrigger data-testid="select-label">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {standardCategories.map((category) => (
+                                  <SelectItem key={category.label} value={category.label}>
+                                    {category.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              기본값은 digit range에 맞춰 자동 선택되며, 필요하면 직접 변경할 수 있습니다.
+                              {selectedStandardLabel.examples
+                                ? ` 예시: ${selectedStandardLabel.examples}`
+                                : ""}
+                            </p>
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label>Label</Label>
-                          <Select value={label} onValueChange={(value) => setLabel(value as StandardLabel)}>
-                            <SelectTrigger data-testid="select-label">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STANDARD_LABELS.map((item) => (
-                                <SelectItem key={item} value={item}>
-                                  {item}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
                       <MasterNameField masterName={masterName} setMasterName={setMasterName} />
                       <LocalizedNamesFields names={names} onNameChange={updateCreateName} />
                       <Button
@@ -377,19 +404,25 @@ export default function CreatePage() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">Mystery Ingredient</CardTitle>
-                      <CardDescription>Label is fixed to "mistery", range is fixed to 9000.</CardDescription>
+                      <CardDescription>
+                        Label is fixed to "{mysteryCategory.label}" and the range starts at {mysteryCategory.startId}.
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Digit Range</Label>
-                          <Input value="9000" disabled />
+                          <Input value={formatCategoryRange(mysteryCategory)} disabled />
                         </div>
                         <div className="space-y-2">
                           <Label>Label</Label>
-                          <Input value="mistery" disabled />
+                          <Input value={mysteryCategory.label} disabled />
                         </div>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        start_id {mysteryCategory.startId}
+                        {mysteryCategory.examples ? `, 예시: ${mysteryCategory.examples}` : ""}
+                      </p>
                       <MasterNameField masterName={masterName} setMasterName={setMasterName} />
                       <p className="text-xs text-muted-foreground">
                         All language names will be auto-filled from master name.
@@ -415,19 +448,25 @@ export default function CreatePage() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">Cuisine Ingredient</CardTitle>
-                      <CardDescription>Range is fixed to 8000, names auto-filled from master name.</CardDescription>
+                      <CardDescription>
+                        Range starts at {cuisineCategory.startId} and names are auto-filled from master name.
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Digit Range</Label>
-                          <Input value="8000" disabled />
+                          <Input value={formatCategoryRange(cuisineCategory)} disabled />
                         </div>
                         <div className="space-y-2">
                           <Label>Label</Label>
-                          <Input value="cuisine" disabled />
+                          <Input value={cuisineCategory.label} disabled />
                         </div>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        start_id {cuisineCategory.startId}
+                        {cuisineCategory.examples ? `, 예시: ${cuisineCategory.examples}` : ""}
+                      </p>
                       <MasterNameField masterName={masterName} setMasterName={setMasterName} />
                       <Button
                         className="w-full"

@@ -1,6 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import axios from "axios";
 import { apiClient } from "./http";
+import { normalizeCategoryLabel } from "./ingredient-categories";
 
 function unwrapData<T>(payload: unknown): T {
   if (
@@ -57,7 +58,8 @@ type IngredientPatchRow = {
 
 type MigrationNewFoodRow = {
   source_id: number;
-  target_digit_number: number;
+  target_digit_number?: number;
+  target_label?: string;
 };
 
 type MigrationNicknameRow = {
@@ -276,20 +278,35 @@ export async function apiRequest(
         .map((row) => ({
           source_id: Number(row.source_id),
           target_digit_number: Number(row.target_digit_number),
+          target_label: normalizeCategoryLabel(String(row.target_label ?? "")),
         }))
         .filter(
           (row) =>
             Number.isInteger(row.source_id) &&
             row.source_id > 0 &&
-            Number.isInteger(row.target_digit_number) &&
-            row.target_digit_number > 0,
+            (
+              (Number.isInteger(row.target_digit_number) && row.target_digit_number > 0) ||
+              row.target_label.length > 0
+            ),
         );
 
       if (rows.length === 0) {
         throw new Error("At least one valid migration row is required");
       }
 
-      const res = await apiClient.post("/migrationNewFood", rows);
+      const body = rows.map((row) =>
+        row.target_label.length > 0
+          ? {
+              source_id: row.source_id,
+              target_label: row.target_label,
+            }
+          : {
+              source_id: row.source_id,
+              target_digit_number: row.target_digit_number,
+            },
+      );
+
+      const res = await apiClient.post("/migrationNewFood", body);
       return res.data;
     }
 

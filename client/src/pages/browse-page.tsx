@@ -28,7 +28,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const RANGES = [1000, 2000, 3000, 4000, 5000, 8000, 9000];
+const RANGES = [1000, 2000, 3000, 4000, 5000, 8000, 9000, 10000];
 
 export default function BrowsePage() {
   const [digit, setDigit] = useState(1000);
